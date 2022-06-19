@@ -100,6 +100,13 @@ namespace UniversalPowerupSystem
             RawCustomPowerupPool.Add(customPowerup);
             return true;
         }
+        
+        public static bool RegCustomPowerup(Powerup powerup)
+        {
+            if (RawCustomPowerupPool.Select(customPowerup => customPowerup.Powerup).Contains(powerup)) return false;
+            RawCustomPowerupPool.Add(new CustomPowerup(powerup));
+            return true;
+        }
 
         public static readonly List<CustomPowerup> RawCustomPowerupPool = new List<CustomPowerup>();
         public static int OncePowerupCount;
