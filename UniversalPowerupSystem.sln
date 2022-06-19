@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniversalPowerupSystem", "UniversalPowerupSystem\UniversalPowerupSystem.csproj", "{6CC2A17D-6D5F-4689-8C6E-4539B9ABD9DF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6CC2A17D-6D5F-4689-8C6E-4539B9ABD9DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CC2A17D-6D5F-4689-8C6E-4539B9ABD9DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CC2A17D-6D5F-4689-8C6E-4539B9ABD9DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CC2A17D-6D5F-4689-8C6E-4539B9ABD9DF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
