@@ -9,8 +9,8 @@ using BepInEx.Logging;
 using flanne;
 using flanne.Core;
 using HarmonyLib;
+using Sirenix.Utilities;
 using UnityEngine;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
@@ -24,7 +24,7 @@ namespace UniversalPowerupSystem
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool ContainsPowerup(this IEnumerable<CustomPowerup> list, Powerup p) =>
-            list.Select(powerup => powerup.Powerup).Contains(p);
+            list.ToPowerupEnum().Contains(p);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsRepeatable(this CustomPowerup customPowerup) => customPowerup.Powerup.isRepeatable;
@@ -49,9 +49,11 @@ namespace UniversalPowerupSystem
         public ReLoad Reload;
         public PreActionDelegate PreAction;
         public BackupPreActionDelegate BackupPreAction;
+        public bool IsCustom;
 
         public CustomPowerup(Powerup powerup, float? weight = null, Cond condition = null,
-            ReLoad reLoad = null, PreActionDelegate preAction = null, BackupPreActionDelegate backupPreAction = null)
+            ReLoad reLoad = null, PreActionDelegate preAction = null, BackupPreActionDelegate backupPreAction = null,
+            bool isCustom = false)
         {
             Powerup = powerup;
             Weight = weight ?? UniversalSys.StdWeight;
@@ -60,6 +62,7 @@ namespace UniversalPowerupSystem
             Reload = reLoad ?? UniversalSys.StdReload;
             PreAction = preAction;
             BackupPreAction = backupPreAction;
+            IsCustom = isCustom;
         }
 
 
@@ -117,31 +120,33 @@ namespace UniversalPowerupSystem
         private static readonly ManualLogSource UniversalSysModLogger =
             BepInEx.Logging.Logger.CreateLogSource("UniversalSys");
 
-        public static bool RegCustomPowerup(Powerup powerup)
+        public static bool RegCustomPowerup(Powerup powerup, bool isCustom = true)
         {
             if (powerup.isRepeatable || RawCustomPowerupPool.ContainsPowerup(powerup)) return false;
-            RawCustomPowerupPool.Add(new CustomPowerup(powerup));
+            RawCustomPowerupPool.Add(new CustomPowerup(powerup, isCustom: isCustom));
             return true;
         }
 
-        public static bool RegCustomPowerup(CustomPowerup customPowerup)
+        public static bool RegCustomPowerup(CustomPowerup customPowerup, bool isCustom = true)
         {
             if (customPowerup.IsRepeatable() || RawCustomPowerupPool.Contains(customPowerup)) return false;
+            customPowerup.IsCustom = isCustom;
             RawCustomPowerupPool.Add(customPowerup);
             return true;
         }
 
-        public static bool RegRepeatableCustomPowerup(Powerup powerup)
+        public static bool RegRepeatableCustomPowerup(Powerup powerup, bool isCustom = true)
         {
             if (RawRepeatableCustomPowerupPool.ContainsPowerup(powerup)) return false;
-            RawRepeatableCustomPowerupPool.Add(new CustomPowerup(powerup));
+            RawRepeatableCustomPowerupPool.Add(new CustomPowerup(powerup, isCustom: isCustom));
             return true;
         }
 
-        public static bool RegRepeatableCustomPowerup(CustomPowerup powerup)
+        public static bool RegRepeatableCustomPowerup(CustomPowerup customPowerup, bool isCustom = true)
         {
-            if (RawRepeatableCustomPowerupPool.Contains(powerup)) return false;
-            RawRepeatableCustomPowerupPool.Add(powerup);
+            if (RawRepeatableCustomPowerupPool.Contains(customPowerup)) return false;
+            customPowerup.IsCustom = isCustom;
+            RawRepeatableCustomPowerupPool.Add(customPowerup);
             return true;
         }
 
@@ -164,6 +169,15 @@ namespace UniversalPowerupSystem
                 where !RawRepeatableCustomPowerupPool.ContainsPowerup(p) &&
                       p.isRepeatable
                 select new CustomPowerup(p, condition: StdRepeatableCondition));
+
+            RawCustomPowerupPool
+                .Where(powerup =>
+                    !powerup.IsCustom && !PowerupGenerator.Instance.profile.powerupPool.Contains(powerup.Powerup))
+                .ToImmutableList().ForEach(powerup => RawCustomPowerupPool.Remove(powerup));
+            RawRepeatableCustomPowerupPool
+                .Where(powerup =>
+                    !powerup.IsCustom && !PowerupGenerator.Instance.profile.powerupPool.Contains(powerup.Powerup))
+                .ToImmutableList().ForEach(powerup => RawRepeatableCustomPowerupPool.Remove(powerup));
         }
 
         private void Start()
@@ -219,23 +233,25 @@ namespace UniversalPowerupSystem
 
         public static readonly CustomPowerup.BackupPreActionDelegate StdBackupPreAction = null;
 
-        public static AssetBundle IconAsset;
-        public static Sprite NullIcon;
+        public static readonly AssetBundle IconAsset;
+        public static readonly Sprite NullIcon;
         public static GameState GameState;
 
         static UniversalSys()
         {
-            if (!File.Exists($"{Paths.PluginPath}/Addition/powerupicon.icons")) return;
-            IconAsset = AssetBundle.LoadFromFile($"{Paths.PluginPath}/Addition/powerupicon.icons");
-            NullIcon = LoadAsset<Sprite>("NullIcon");
+            if (File.Exists($"{Paths.PluginPath}/Addition/powerupicon.icons"))
+            {
+                IconAsset = AssetBundle.LoadFromFile($"{Paths.PluginPath}/Addition/powerupicon.icons");
+                NullIcon = LoadAsset<Sprite>("NullIcon");
+            }
         }
-        
+
         public static T LoadAsset<T>(string name)
             where T : Object
         {
             return IconAsset.LoadAsset<T>(name);
         }
-        
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(GameState), "Awake")]
         public static void GameStateAwake(GameState __instance)
@@ -332,6 +348,21 @@ namespace UniversalPowerupSystem
         public static void MonitorRemove(Powerup powerup)
         {
             TakenPool.AddRange(RawCustomPowerupPool.FindAll(customPowerup => customPowerup.Powerup == powerup));
+        }
+
+        [HarmonyPrefix, HarmonyPatch(typeof(PowerupGenerator), "GetRandomDevilProfile")]
+        public static bool GenEmptyBook(PowerupGenerator __instance, ref List<Powerup> __result, int num)
+        {
+            __result = __instance.devilPool.Count < num
+                ? __instance.devilPool.Take(__instance.devilPool.Count).ToList()
+                : __instance.GetRandom(num, __instance.devilPool);
+
+            while (__result.Count < num)
+            {
+                __result.Add(ScriptableObject.CreateInstance<NullPowerup>().Init());
+            }
+
+            return false;
         }
 
         #region Block
